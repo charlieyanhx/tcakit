@@ -1,7 +1,5 @@
 """Quickstart: simulate, decompose shortfall, benchmark, and calibrate the square-root law."""
 
-import pandas as pd
-
 from tcakit import benchmark_slippage, implementation_shortfall
 from tcakit.impact import fit_sqrt_law, market_stats, realized_impact
 from tcakit.synth import simulate

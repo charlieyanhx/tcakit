@@ -7,7 +7,7 @@ BPS = 1e4
 
 
 def test_interval_vwap_and_twap_hand_computed(market_abc, buy_order):
-    orders, fills = buy_order
+    _, fills = buy_order
     t0, t1 = fills["ts"].min(), fills["ts"].max()
     bars = market_abc[(market_abc["ts"] >= t0) & (market_abc["ts"] <= t1)]
     # bars i=5..15, vol 1000 each except i=12 -> 10000

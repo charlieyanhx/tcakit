@@ -36,12 +36,13 @@ def test_market_stats_recover_generator_inputs_without_impact():
     assert st["sigma_daily"] == pytest.approx(s.params["sigma_daily"], rel=0.10)
 
 
-def test_own_impact_inflates_measured_vol(sim):
+def test_own_impact_inflates_measured_vol():
     """Permanent impact adds variance to mid; measured σ exceeds the generator's σ.
     Documented in synth.py — a real-world caveat for impact regressions."""
-    st = market_stats(sim.market).set_index("symbol").loc["SYN"]
-    assert st["sigma_daily"] > sim.params["sigma_daily"]
-    assert st["sigma_daily"] < 1.5 * sim.params["sigma_daily"]
+    big = simulate(n_days=60, orders_per_day=8, seed=9, sqrt_law_y=6.0,
+                   size_adv_range=(0.01, 0.05), spread_bps=0.0)
+    st = market_stats(big.market).set_index("symbol").loc["SYN"]
+    assert st["sigma_daily"] > 1.03 * big.params["sigma_daily"]
 
 
 def _true_stats(sim):
@@ -59,12 +60,17 @@ def test_sqrt_law_recovers_y_on_completion_impact(sim):
     assert res.rmse_out > 0 and np.isfinite(res.r2_in)
 
 
-def test_average_cost_is_two_thirds_of_completion_impact(sim):
-    """Linear schedule under the square-root law: mean paid impact = 2/3 of peak (Bouchaud)."""
-    df = realized_impact(sim.orders, sim.fills, sim.market, stats=_true_stats(sim))
+def test_average_cost_is_two_thirds_of_completion_impact():
+    """Linear schedule under the square-root law: mean paid impact = 2/3 of peak (Bouchaud).
+    Checked noise-free so the statement is exact; the discrete schedule makes it slightly
+    above 2/3 (Σ sqrt(j/n)/n → 2/3 from above)."""
+    s = simulate(n_days=30, orders_per_day=8, seed=2, spread_bps=0.0, p_cross=0.0,
+                 sqrt_law_y=1.0, noise_scale=0.0)
+    df = realized_impact(s.orders, s.fills, s.market, stats=_true_stats(s))
     y_end = fit_sqrt_law(df, target="impact_end", holdout=0.0).params["Y"]
     y_cost = fit_sqrt_law(df, target="cost", holdout=0.0).params["Y"]
-    assert y_cost / y_end == pytest.approx(2 / 3, abs=0.06)
+    assert y_end == pytest.approx(1.0, abs=1e-6)
+    assert 2 / 3 < y_cost / y_end < 0.72
 
 
 def test_spread_shows_up_in_shortfall_spread_component():

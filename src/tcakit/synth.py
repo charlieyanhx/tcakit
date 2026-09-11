@@ -4,8 +4,9 @@ Model (one symbol "SYN", 1-minute bars, `MINUTES_PER_DAY` per session):
 
 * mid is geometric Brownian motion with daily vol `sigma_daily` (per-minute
   `sigma_daily / sqrt(MINUTES_PER_DAY)`), plus the **permanent** impact of our own orders;
-* each parent order of size Q executes linearly over `duration` minutes (one child per
-  minute); after a fraction φ of Q is done the cumulative impact on mid is
+* each parent order of size Q executes linearly (one child per minute) at a target
+  participation rate drawn from `pov_range`, so `duration = Q / (pov · ADV / MINUTES_PER_DAY)`
+  clipped to `duration_range`; after a fraction φ of Q is done the cumulative impact on mid is
   `side · Y · sigma_daily · sqrt(φ · Q / ADV)` (square-root law, coefficient `Y`), applied
   multiplicatively to the arrival mid and never reverting;
 * a child fills at the post-impact mid, plus `side · half_spread` with probability
@@ -23,6 +24,8 @@ is therefore an upper bound. Note that our own permanent impact adds variance to
 path, so vol measured from `market` is *higher* than `sigma_daily` when `sqrt_law_y > 0` —
 this is a real effect (impact contaminates realized-vol estimates), not a bug, and the
 recovery tests pass the true `sigma_daily` explicitly to isolate the estimator.
+`noise_scale=0` switches the Brownian noise off (impact still uses `sigma_daily`) for
+exact identity checks.
 """
 
 from __future__ import annotations
@@ -61,9 +64,11 @@ def simulate(
     sqrt_law_y: float = 1.0,
     p_cross: float = 0.7,
     fee_per_share: float = 0.002,
-    size_adv_range: tuple[float, float] = (0.001, 0.05),
-    duration_range: tuple[int, int] = (5, 40),
+    size_adv_range: tuple[float, float] = (0.0005, 0.02),
+    pov_range: tuple[float, float] = (0.05, 0.25),
+    duration_range: tuple[int, int] = (5, 90),
     reversion_min: int = 15,
+    noise_scale: float = 1.0,
     start: str = "2026-01-05 14:30:00",
 ) -> SynthResult:
     rng = np.random.default_rng(seed)
@@ -79,7 +84,7 @@ def simulate(
     )
     ts = pd.DatetimeIndex(ts).tz_localize("UTC") if pd.DatetimeIndex(ts).tz is None else pd.DatetimeIndex(ts)
 
-    logmid = np.log(mid0) + np.cumsum(sig_min * rng.standard_normal(n_min))
+    logmid = np.log(mid0) + np.cumsum(noise_scale * sig_min * rng.standard_normal(n_min))
     # permanent impact is applied in log space from each child fill onward
     volume = np.tile(_u_shape(MINUTES_PER_DAY) * adv, n_days)
     half_frac = spread_bps / 2 / 1e4  # half-spread as a fraction of the prevailing mid
@@ -93,14 +98,15 @@ def simulate(
         placed = 0
         while placed < orders_per_day:
             delay = int(rng.integers(0, 6))
-            dur = int(rng.integers(duration_range[0], duration_range[1] + 1))
+            q_adv = float(np.exp(rng.uniform(np.log(size_adv_range[0]), np.log(size_adv_range[1]))))
+            pov = float(rng.uniform(*pov_range))
+            dur = int(np.clip(round(q_adv * MINUTES_PER_DAY / pov), *duration_range))
             if cursor + delay + dur + reversion_min >= MINUTES_PER_DAY:
                 break
             gap = int(rng.integers(0, 4))
             dec = base + cursor + gap
             arr = dec + delay
             side = int(rng.choice([1, -1]))
-            q_adv = float(np.exp(rng.uniform(np.log(size_adv_range[0]), np.log(size_adv_range[1]))))
             qty = q_adv * adv
             child = qty / dur
             arrival_px = float(np.exp(logmid[arr]))
@@ -155,9 +161,10 @@ def simulate(
             "volume": volume,
         }
     )
-    params = dict(
-        n_days=n_days, orders_per_day=orders_per_day, seed=seed, mid0=mid0,
-        sigma_daily=sigma_daily, adv=adv, spread_bps=spread_bps, sqrt_law_y=sqrt_law_y,
-        p_cross=p_cross, fee_per_share=fee_per_share, reversion_min=reversion_min,
-    )
+    params = {
+        "n_days": n_days, "orders_per_day": orders_per_day, "seed": seed, "mid0": mid0,
+        "sigma_daily": sigma_daily, "adv": adv, "spread_bps": spread_bps,
+        "sqrt_law_y": sqrt_law_y, "p_cross": p_cross, "fee_per_share": fee_per_share,
+        "reversion_min": reversion_min, "pov_range": pov_range, "noise_scale": noise_scale,
+    }
     return SynthResult(pd.DataFrame(orders), pd.DataFrame(fills), market, params)

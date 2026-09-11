@@ -114,7 +114,7 @@ def realized_impact(
 
 def _split(n: int, holdout: float, rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
     idx = rng.permutation(n)
-    k = int(round(n * holdout))
+    k = round(n * holdout)
     return idx[k:], idx[:k]
 
 
