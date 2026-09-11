@@ -1,5 +1,9 @@
 # tcakit — plan v2 (2026-09-11)
 
+**Scope (owner's call, 2026-09-11): this project is a tool, tested on our own fills.** The
+public-data study (ITCH panel, paper #8) is optional later work, kept below because the
+identification facts it rests on also govern what the tool may claim.
+
 Supersedes the v1 plan pasted from the job-listing analysis. Two facts changed it:
 the public dataset it named no longer exists in downloadable form, and the identification
 strategy it assumed does not work. Both are documented below so the paper's "what this data
@@ -98,16 +102,16 @@ tcakit/
     tcalogger.py   private JSONL → canonical frames (gitignored fixture of the 6 records)
 ```
 
-## 5. Milestones (re-ordered: public first, private when the gate is met)
+## 5. Milestones (tool first; public study optional)
 
-| Version | Scope | Verify |
+| Version | Scope | Status |
 |---|---|---|
-| v0.1 | schema, synth, IS, benchmarks, sqrt-law — **done, moved here 2026-09-11** | 27 tests |
-| v0.2 (2 wk) | `book/` ITCH streaming + LOB builder for a 10-name panel × 15 days (hashes recorded); `impact/ofi`, `response`, `bookwalk`; replay; Almgren/I-star/log harness on synthetic; `FitResult`; markdown report | §3 bars; one day parses in < 60 min on this Mac or switch to a Rust parser |
-| paper #8 (1 wk) | "Impact-model calibration on public order-book data: what 15 Nasdaq ITCH days can and cannot identify" — §2 map, §3 bars, held-out by day, negative results kept | pre-registered bars met or reported failed |
-| v0.3 (2 wk) | scorecards + difficulty adjustment (σ√(Q/ADV) vs KO invariance, held-out); `adapters/tcalogger.py` on the 6 records; options units; PyPI | n-gate printed; identity tests on options legs |
-| v0.4 (1–2 wk) | scheduler + frontier; A/B module with CUPED and power | AC closed forms vs numeric; CUPED reduces variance on synth |
-| private pass | when ≥ 50 live parents have accrued from the AWS box | gate in §3 |
+| v0.1 | schema, synth, IS, benchmarks, sqrt-law | done — 27 tests |
+| v0.2 | Almgren-2005 + I-star fits (hold-out by day); scorecards + difficulty adjustment; options units; markdown report; `adapters/tcalogger` on our fills; CI, licence, README | **done 2026-09-11 — 48 tests; report runs on the 6 real fills** |
+| v0.3 | Almgren-Chriss scheduler + efficient frontier; VWAP/TWAP/POV baselines; A/B module (parent-level randomisation, symbol-day clusters, CUPED, power) | next |
+| v0.4 | market frame for options (per-leg NBBO at fill from the chain recorder) → real spread/timing split, reversion(k), `bps_underlying`; add `decision_ts` to the live logger (user-owned) | when the recorder runs |
+| private pass | descriptive report on ≥ 50 live parents from the AWS box | gated (§3) |
+| optional | ITCH public panel, OFI / response / book-walk, paper #8 | not scheduled |
 
 ## 6. Open items owned by the user
 

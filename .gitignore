@@ -9,3 +9,5 @@ data/
 dist/
 src/tcakit/adapters/*private*
 tests/fixtures/private/
+tests/fixtures/private_*
+docs/validation-private.md

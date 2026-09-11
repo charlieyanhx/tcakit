@@ -151,3 +151,129 @@ def fit_sqrt_law(
         r2_in=r2, rmse_in=rmse_in, rmse_out=rmse_out, n_in=len(tr), n_out=len(te),
         notes={"form": "target = Y * sigma_daily * sqrt(qty/ADV)", "bars_per_day": MINUTES_PER_DAY},
     )
+
+
+# ---------------------------------------------------------------------------
+# Shared nonlinear harness: Almgren et al. (2005) and Kissell I-star
+# ---------------------------------------------------------------------------
+
+def _split_by_day(d: pd.DataFrame, holdout: float, rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
+    """Hold out whole days when a timestamp column exists; otherwise fall back to rows.
+    Returns positional indices into `d`."""
+    for col in ("arrival_ts", "first_ts", "ts"):
+        if col in d.columns:
+            days = pd.to_datetime(d[col]).dt.normalize().to_numpy()
+            uniq = np.unique(days)
+            k = round(len(uniq) * holdout)
+            test_days = set(rng.permutation(uniq)[:k].tolist())
+            mask = np.array([x in test_days for x in days])
+            return np.flatnonzero(~mask), np.flatnonzero(mask)
+    return _split(len(d), holdout, rng)
+
+
+def _nls(fn, X: np.ndarray, y: np.ndarray, p0: np.ndarray, bounds) -> np.ndarray:
+    from scipy.optimize import curve_fit
+    try:
+        p, _ = curve_fit(fn, X, y, p0=p0, bounds=bounds, maxfev=20_000)
+    except (RuntimeError, ValueError):
+        p = np.full(len(p0), np.nan)
+    return p
+
+
+def _harness(model, target, names, fn, X, y, p0, bounds, d, holdout, seed, n_boot, notes):
+    rng = np.random.default_rng(seed)
+    tr, te = _split_by_day(d, holdout, rng)
+    p = _nls(fn, X[:, tr], y[tr], p0, bounds)
+    yhat = fn(X[:, tr], *p)
+    resid = y[tr] - yhat
+    ss_tot = float(((y[tr] - y[tr].mean()) ** 2).sum())
+    r2 = 1.0 - float((resid**2).sum()) / ss_tot if ss_tot > 0 else np.nan
+    rmse_in = float(np.sqrt((resid**2).mean()))
+    rmse_out = float(np.sqrt(((y[te] - fn(X[:, te], *p)) ** 2).mean())) if len(te) else np.nan
+    boots = []
+    for _ in range(n_boot):
+        b = rng.integers(0, len(tr), len(tr))
+        boots.append(_nls(fn, X[:, tr][:, b], y[tr][b], p, bounds))
+    boots = np.array(boots)
+    ci = {n: tuple(map(float, np.nanpercentile(boots[:, i], [2.5, 97.5]))) for i, n in enumerate(names)}
+    return FitResult(model=model, target=target, params=dict(zip(names, map(float, p))),
+                     param_ci=ci, r2_in=r2, rmse_in=rmse_in, rmse_out=rmse_out,
+                     n_in=len(tr), n_out=len(te), notes=notes)
+
+
+def fit_almgren2005(
+    df: pd.DataFrame,
+    holdout: float = 0.3,
+    seed: int = 0,
+    n_boot: int = 200,
+) -> dict[str, FitResult]:
+    """Almgren, Thum, Hauptmann, Li (2005) in two fits sharing one hold-out split:
+
+    * permanent:  `impact_end = gamma · sigma · q_adv^alpha`          (lit. alpha ≈ 0.9–1)
+    * temporary:  `cost − impact_end/2 = eta · sigma · participation^beta`  (lit. beta ≈ 0.6)
+
+    The realized cost bears half the permanent impact under a linear schedule, hence the
+    `/2`. Returns `{"permanent": FitResult, "temporary": FitResult}`.
+    """
+    d = df.dropna(subset=["impact_end", "cost", "sigma", "q_adv", "participation"]).reset_index(drop=True)
+    d = d[(d["q_adv"] > 0) & (d["participation"] > 0)].reset_index(drop=True)
+    sig, q, pi = (d[c].to_numpy(dtype=float) for c in ("sigma", "q_adv", "participation"))
+
+    def perm(X, gamma, alpha):
+        return gamma * X[0] * X[1] ** alpha
+
+    def temp(X, eta, beta):
+        return eta * X[0] * X[1] ** beta
+
+    Xp = np.vstack([sig, q])
+    yp = d["impact_end"].to_numpy(dtype=float)
+    Xt = np.vstack([sig, pi])
+    yt = (d["cost"] - d["impact_end"] / 2.0).to_numpy(dtype=float)
+    bounds = ([-np.inf, 0.05], [np.inf, 3.0])
+    return {
+        "permanent": _harness("almgren2005_permanent", "impact_end", ["gamma", "alpha"], perm,
+                              Xp, yp, np.array([1.0, 0.5]), bounds, d, holdout, seed, n_boot,
+                              {"form": "impact_end = gamma*sigma*q_adv^alpha", "holdout": "by day"}),
+        "temporary": _harness("almgren2005_temporary", "cost - impact_end/2", ["eta", "beta"], temp,
+                              Xt, yt, np.array([0.1, 0.6]), bounds, d, holdout, seed, n_boot,
+                              {"form": "cost - impact_end/2 = eta*sigma*participation^beta",
+                               "holdout": "by day"}),
+    }
+
+
+def fit_istar(
+    df: pd.DataFrame,
+    target: str = "cost",
+    holdout: float = 0.3,
+    seed: int = 0,
+    n_boot: int = 200,
+    fit_sigma_exponent: bool = False,
+) -> FitResult:
+    """Kissell I-star: `I* = a1 · q_adv^a2 · sigma^a3`, realized `MI = b1·I*·pov^a4 + (1−b1)·I*`.
+
+    `a3` is fixed at 1 unless `fit_sigma_exponent` (it is unidentified when sigma barely
+    varies across orders, e.g. single-symbol data). Fits `MI` on `target` in one NLS.
+    """
+    d = df.dropna(subset=[target, "sigma", "q_adv", "participation"]).reset_index(drop=True)
+    d = d[(d["q_adv"] > 0) & (d["participation"] > 0)].reset_index(drop=True)
+    X = np.vstack([d["q_adv"], d["sigma"], d["participation"]]).astype(float)
+    y = d[target].to_numpy(dtype=float)
+    if fit_sigma_exponent:
+        names = ["a1", "a2", "a3", "b1", "a4"]
+
+        def fn(X, a1, a2, a3, b1, a4):
+            istar = a1 * X[0] ** a2 * X[1] ** a3
+            return istar * (b1 * X[2] ** a4 + (1.0 - b1))
+        p0 = np.array([1.0, 0.5, 1.0, 0.5, 0.5])
+        bounds = ([-np.inf, 0.05, 0.0, 0.0, 0.05], [np.inf, 3.0, 3.0, 1.0, 3.0])
+    else:
+        names = ["a1", "a2", "b1", "a4"]
+
+        def fn(X, a1, a2, b1, a4):
+            istar = a1 * X[0] ** a2 * X[1]
+            return istar * (b1 * X[2] ** a4 + (1.0 - b1))
+        p0 = np.array([1.0, 0.5, 0.5, 0.5])
+        bounds = ([-np.inf, 0.05, 0.0, 0.05], [np.inf, 3.0, 1.0, 3.0])
+    return _harness("istar", target, names, fn, X, y, p0, bounds, d, holdout, seed, n_boot,
+                    {"form": "MI = a1*q_adv^a2*sigma^a3 * (b1*pov^a4 + 1-b1)",
+                     "a3": "fitted" if fit_sigma_exponent else "fixed at 1", "holdout": "by day"})

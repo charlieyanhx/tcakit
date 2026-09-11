@@ -1,15 +1,28 @@
 [project]
 name = "tcakit"
-version = "0.1.0"
+version = "0.2.0"
 description = "Transaction cost analysis and market-impact calibration for equities and listed options: implementation shortfall decomposition, benchmarks, venue/broker scorecards."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Hanxiong (Charlie) Yan" }]
+keywords = ["tca", "transaction-cost-analysis", "market-impact", "implementation-shortfall", "execution", "options"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Financial and Insurance Industry",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Office/Business :: Financial :: Investment",
+]
 dependencies = ["numpy>=1.26", "pandas>=2.1", "scipy>=1.11"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-cov", "hypothesis>=6", "ruff"]
+
+[project.urls]
+Homepage = "https://github.com/charlieyanhx/tcakit"
+Changelog = "https://github.com/charlieyanhx/tcakit/blob/main/CHANGELOG.md"
 
 [build-system]
 requires = ["hatchling"]
