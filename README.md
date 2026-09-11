@@ -32,17 +32,24 @@ python examples/quickstart.py
 ## Quickstart
 
 ```python
-from tcakit import implementation_shortfall, benchmark_slippage, fit_almgren2005, realized_impact
+from tcakit import implementation_shortfall, benchmark_slippage, fit_sqrt_law, fit_almgren2005, realized_impact
 from tcakit.synth import simulate
 
 sim = simulate(n_days=120, orders_per_day=8, seed=42, sigma_daily=0.02, spread_bps=5.0, sqrt_law_y=0.8)
 
 sf = implementation_shortfall(sim.orders, sim.fills, sim.market)   # one row per parent order
 bm = benchmark_slippage(sim.orders, sim.fills, sim.market)          # arrival / vwap / twap / close / reversion
-df = realized_impact(sim.orders, sim.fills, sim.market)
-fit = fit_almgren2005(df)
-print(fit["permanent"].summary())
-# almgren2005_permanent on impact_end: gamma=0.79 [0.71, 0.87], alpha=0.51 [0.46, 0.56] | R²_in=0.62 RMSE_out=... (n_in=..., n_out=...)
+df = realized_impact(sim.orders, sim.fills, sim.market).merge(sim.orders[["order_id", "arrival_ts"]])
+print(fit_sqrt_law(df).summary())                 # one free parameter, exponent fixed at 0.5
+print(fit_almgren2005(df)["permanent"].summary())  # free exponent
+# sqrt_law on impact_end: Y=0.898 [0.617, 1.198] | R²_in=0.027 RMSE_out=0.00415 (n_in=665, n_out=285)
+# almgren2005_permanent:  gamma=1.72 [0.19, 51.4], alpha=0.654 [0.246, 1.389] | RMSE_out=0.0044 (n_in=665, n_out=285)
+```
+
+Read those two lines together: with 950 orders at realistic noise the square-root law's
+single coefficient is identified (true Y = 0.8 sits inside the CI) while a free exponent is
+not — the CI on `alpha` spans the whole literature range. That is why desks fix the
+exponent, and the library shows it instead of printing a point estimate.
 ```
 
 ### Your own fills
