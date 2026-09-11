@@ -22,6 +22,7 @@ dev = ["pytest>=8", "pytest-cov", "hypothesis>=6", "ruff"]
 
 [project.urls]
 Homepage = "https://github.com/charlieyanhx/tcakit"
+Documentation = "https://charlieyan.com/work/tcakit/"
 Changelog = "https://github.com/charlieyanhx/tcakit/blob/main/CHANGELOG.md"
 
 [build-system]
