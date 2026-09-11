@@ -1,0 +1,26 @@
+[project]
+name = "tcakit"
+version = "0.1.0"
+description = "Transaction cost analysis and market-impact calibration for equities and listed options: implementation shortfall decomposition, benchmarks, venue/broker scorecards."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Hanxiong (Charlie) Yan" }]
+dependencies = ["numpy>=1.26", "pandas>=2.1", "scipy>=1.11"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-cov", "hypothesis>=6", "ruff"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tcakit"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
