@@ -83,22 +83,39 @@ and `spread` is reported as `NaN` if no quote is available rather than assumed z
 Interval VWAP uses market trades **excluding the order's own fills** when `market`
 carries our fills flagged; otherwise it is documented as inclusive.
 
-## Impact models (`impact.py`)
+## Impact models (`impact/`)
 
-Realized impact per parent order `I = s·(P̄ − P_0)/P_0` (or mid-to-mid `s·(P_T − P_0)/P_0`
-for permanent impact). Explanatory variables: participation `π = Q_x / V_interval`,
-size ratio `Q/ADV`, daily vol `σ`, spread.
+Two families, kept apart because they are identified by different data (see
+`docs/PLAN.md` §2). A historical book cannot react to orders that were not in it, so
+replaying synthetic parents against public data measures **mechanical** cost only; the
+square-root law and its relatives need real parent orders.
 
-1. **Square-root law** — `I = Y·σ·sqrt(Q/ADV) + ε`; fit `Y` by OLS through the origin;
-   report `Y`, R², and held-out RMSE. Literature range `Y ∈ [0.5, 1.5]`.
-2. **Almgren et al. (2005)** — temporary `η·σ·π^β` (β≈0.6) and permanent `γ·σ·(Q/ADV)^α`
-   (α≈1); nonlinear least squares with bootstrap CIs on exponents.
-3. **I-star (Kissell)** — `I* = a1·(Q/ADV)^a2·σ^a3`, temporary share `b1·π^a4`; same
-   fitting harness.
-4. **Propagator** (Bouchaud) — deferred; needs signed-trade series.
+**Public-identifiable (fit on ITCH / any L2 tape):**
 
-Every fit is done through one `fit(model, orders, market, holdout=0.3)` entry point that
-returns a `FitResult` with `params, param_ci, r2_in, rmse_in, rmse_out, n_in, n_out`.
+1. **OFI** (Cont, Kukanov, Stoikov 2014) — `Δmid = λ·OFI + ε` per symbol-day at 10 s;
+   `λ ∝ 1/depth`. Literature: R² ≥ 0.50 on 44/50 stocks.
+2. **Trade response / propagator** (Bouchaud) — `R(ℓ) = ⟨ε_t·(m_{t+ℓ} − m_t)⟩` on signed
+   executions; slow power-law decay; `R(1) < 0` is a sign bug.
+3. **Book-walk cost** — instantaneous cost of sweeping a snapshot to size `q`; equals the
+   half-spread at `q = 1` share to 1e-9 and is monotone in `q`.
+
+**Metaorder (fit on real parent orders; synthetic for recovery tests):**
+
+Realized impact per parent `I = s·(P̄ − P_0)/P_0` (permanent: `s·(P_T − P_0)/P_0`).
+Explanatory variables: participation `π = Q_x / V_interval`, `Q/ADV`, daily `σ`, spread.
+
+4. **Square-root law** — `I = Y·σ·sqrt(Q/ADV)`; OLS through the origin. `Y ∈ [0.5, 1.5]`.
+5. **Almgren et al. (2005)** — temporary `η·σ·π^β` (β≈0.6), permanent `γ·σ·(Q/ADV)^α`
+   (α≈0.9–1); NLS with bootstrap CIs on exponents.
+6. **I-star (Kissell)** — `a1·(Q/ADV)^a2·σ^a3`, temporary share `b1·π^a4`.
+7. **Log form** (Zarinelli et al. 2015) — pre-registered alternative to 4; fits five decades
+   of `Q/ADV` where sqrt fits two. The Bucci et al. (2019) linear→sqrt crossover at
+   `Q/ADV ≈ 1e-3` is the test run when `n` allows.
+
+Every fit goes through one `fit(model, ..., holdout=...)` entry point returning a
+`FitResult(params, param_ci, r2_in, rmse_in, rmse_out, n_in, n_out)`. Hold-out is **by
+day**, never by row. Private metaorder fits print an n-gate (≥ 50 parents AND CI on `Y`
+narrower than `[0.5, 1.5]`) instead of a number until it is met.
 
 ## Scorecards (`scorecards.py`)
 
@@ -118,9 +135,30 @@ canonical frames plus the true parameter dict so tests can assert recovery.
 
 ## Real-data validation (`docs/validation.md`, later)
 
-LOBSTER sample (AMZN/AAPL/GOOG/INTC/MSFT, 2012-06-21, levels 1–10): replay a synthetic
-parent order against the real book to produce fills, then run the full pipeline. The
-data-availability note states exactly which file and hash was used.
+LOBSTER's free samples are no longer downloadable (request form since 2025). Public data
+is Nasdaq's own TotalView-ITCH 5.0 samples: 15 full-market days 2018–2020 at
+`emi.nasdaq.com/ITCH/Nasdaq ITCH/`, ~4.8 GB gz each. `book/itch.py` streams one day at a
+time (curl → gunzip → parser, early filter on stock-locate, per-symbol parquet, gz never
+written to disk) for a 10-name panel; the data-availability note records file names and
+SHA-256 of the gz streams. Replay of synthetic parents against the rebuilt book yields
+the mechanical cost; OFI and response fits yield the public-identifiable impact; the gap
+to the metaorder literature is reported, not filled in.
+
+Private validation uses the live bot's `TCALogger` JSONL (`adapters/tcalogger.py`,
+gitignored fixture) and is gated on `n` as above. `decision_ts` is absent from that
+schema, so the delay component is zero by construction on private data and the report
+says so.
+
+## Options conventions (`options.py`)
+
+Per-leg mid-of-NBBO at fill time; a multi-leg parent's benchmark is the net of leg mids.
+Costs are reported in three units, never in bps of premium notional (a 3¢ miss on a
+−$1.00 spread is "300 bps"): **$ per contract** (primary; equals the bot's
+`implementation_shortfall_cents`), **fraction of net half-spread** (comparable across
+escalator tiers — Muravyev & Pearson 2020 show timed option executions pay < 40 % of the
+quoted spread, which is what the tiers measure), and **bps of delta-adjusted underlying
+notional** (comparable with equity scorecards). Vol points per leg only when vega is
+available.
 
 ## Package layout
 
@@ -131,17 +169,21 @@ src/tcakit/
   synth.py          seeded synthetic market + fills
   benchmarks.py     arrival / VWAP / TWAP / close / participation / reversion
   shortfall.py      IS decomposition
-  impact.py         model definitions + fit harness
+  impact/           metaorder.py, ofi.py, response.py, bookwalk.py, fitresult.py
+  book/             itch.py (streaming parser), lob.py (builder), replay.py
   scorecards.py     grouped stats + difficulty adjustment
-  report.py         markdown report for one order or one scorecard
+  schedule.py       Almgren-Chriss, frontier, VWAP/TWAP/POV, cvx VWAP tracking
+  experiments.py    A/B: parent-level randomization, symbol-day clusters, CUPED, power
+  options.py        NBBO mid per leg, multi-leg parents, three unit conventions
+  report.py         markdown report; every number carries unit + basis + n
+  adapters/         one file per data source; private ones gitignored
 tests/              pytest; one file per module; identities + recovery tests
-docs/DESIGN.md      this file
+docs/DESIGN.md      this file (the spec)
+docs/PLAN.md        milestones, lit review, pre-registered bars, identification map
 ```
 
 ## Roadmap
 
-- v0.1 — schema, synth, benchmarks, shortfall, tests (this week)
-- v0.2 — impact fits with held-out error, scorecards, markdown report
-- v0.3 — LOBSTER replay + validation note; options-specific benchmarks (mid-of-NBBO,
-  delta-adjusted cost for multi-leg); PyPI release
-- later — propagator model, A/B framework for algo variants (separate package)
+See `docs/PLAN.md` §5. Order: public first (ITCH panel, public-identifiable impact,
+paper #8), then scorecards / private adapter / options / PyPI, then scheduler + A/B. The
+private descriptive pass runs when ≥ 50 live parent orders have accrued.
