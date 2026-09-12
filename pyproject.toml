@@ -1,6 +1,6 @@
 [project]
 name = "tcakit"
-version = "0.3.0"
+version = "0.4.0"
 description = "Transaction cost analysis and market-impact calibration for equities and listed options: implementation shortfall decomposition, benchmarks, venue/broker scorecards."
 readme = "README.md"
 requires-python = ">=3.11"

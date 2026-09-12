@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.0 — 2026-09-12
+- `experiments`: symbol-day stratified A/B assignment; difference in mean cost with CR0 cluster-robust SE and t(G−1) inference; CUPED adjustment with the 1 − ρ² identity tested; minimum detectable effect and required n checked against simulation.
+
 ## 0.3.0 — 2026-09-12
 - `schedule`: Almgren-Chriss (2000) closed-form trajectory for risk aversion λ (expm1-stable, λ→0 = TWAP), expected cost and variance, efficient frontier, TWAP / VWAP / POV baselines, cost-to-completion ratio (2/3 rule). Tests: the eq. 15 difference equation, closed-form TWAP cost/variance, optimality under random perturbation, frontier monotonicity.
 
