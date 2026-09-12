@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.3.0 — 2026-09-12
+- `schedule`: Almgren-Chriss (2000) closed-form trajectory for risk aversion λ (expm1-stable, λ→0 = TWAP), expected cost and variance, efficient frontier, TWAP / VWAP / POV baselines, cost-to-completion ratio (2/3 rule). Tests: the eq. 15 difference equation, closed-form TWAP cost/variance, optimality under random perturbation, frontier monotonicity.
+
 ## 0.2.0 — 2026-09-11
 - `impact.fit_almgren2005` (permanent + temporary) and `impact.fit_istar` through one NLS harness; hold-out **by day**; bootstrap CIs on exponents; exact recovery tests
 - `scorecards.scorecard` / `difficulty_adjusted` with bootstrap CIs and a small-n note instead of a silent fit

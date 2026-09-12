@@ -12,6 +12,7 @@ A small, tested library that answers the three questions execution desks ask:
 | **What did this order cost, and why?** | `shortfall`, `benchmarks`, `options` | Perold implementation-shortfall decomposition (delay / spread / timing / opportunity / fees) with an exact identity; arrival, interval VWAP/TWAP, close, participation, post-trade reversion; option costs in $/contract, fraction of half-spread, and delta-adjusted bps |
 | **Which broker / venue / algo / tier is cheaper, after controlling for difficulty?** | `scorecards` | Grouped costs with bootstrap CIs, then mean *residuals* of a difficulty regression — the number that survives "your orders were just harder" |
 | **What will a new order cost?** | `impact` | Square-root law, Almgren et al. (2005), and Kissell I-star, every fit reporting held-out-by-day RMSE and bootstrap CIs, not just R² |
+| **How should it be scheduled?** | `schedule` | Almgren-Chriss (2000) closed-form trajectories and the efficient frontier for a risk aversion λ; TWAP / VWAP / POV baselines; the 2/3-rule cost-to-completion ratio for any schedule |
 
 Design rules, stated once and tested:
 
@@ -25,7 +26,7 @@ Design rules, stated once and tested:
 
 ```bash
 pip install -e ".[dev]"
-pytest -q            # 48 tests
+pytest -q            # 58 tests
 python examples/quickstart.py
 ```
 
@@ -76,6 +77,7 @@ src/tcakit/
   benchmarks.py    arrival / VWAP / TWAP / close / participation / reversion(k)
   shortfall.py     Perold IS decomposition, exact identity
   impact.py        realized_impact; fit_sqrt_law, fit_almgren2005, fit_istar → FitResult
+  schedule.py      Almgren-Chriss closed forms, efficient frontier, TWAP / VWAP / POV, cost/completion ratio
   scorecards.py    grouped costs + difficulty-adjusted residuals, bootstrap CIs
   options.py       per-leg NBBO net mid, $/contract, fraction of half-spread, delta-adj bps
   report.py        markdown report; every table states unit, sign, n
@@ -85,8 +87,8 @@ docs/DESIGN.md     the spec           docs/PLAN.md   roadmap, references, pre-re
 
 ## Roadmap
 
-v0.3 Almgren-Chriss scheduler and efficient frontier, VWAP/TWAP/POV baselines, A/B module
-(parent-level randomisation, symbol-day clusters, CUPED, power) · v0.4 per-leg NBBO market
+v0.3 (shipped): Almgren-Chriss scheduler, efficient frontier, VWAP/TWAP/POV baselines ·
+v0.4: A/B module (parent-level randomisation, symbol-day clusters, CUPED, power); per-leg NBBO market
 frame for options, so spread and timing can be split and `bps_underlying` computed · a
 private descriptive pass once ≥ 50 live parent orders exist (the impact-model n-gate) ·
 optional: a public order-book validation on Nasdaq's free ITCH days (`docs/PLAN.md` §2).
