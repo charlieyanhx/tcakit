@@ -115,7 +115,11 @@ P&L attribution ·
 with deterministic replay; its planned execution page would consume tcakit's per-order
 costs ·
 [quant-research-agent](https://github.com/charlieyanhx/quant-research-agent) — a backtest
-review agent and the evals that measure it.
+review agent and the evals that measure it ·
+[tickq](https://github.com/charlieyanhx/tickq) — DuckDB market-data SQL: partitioned Parquet lake, ASOF
+joins with the tie rule stated, quality checks with recall and precision ·
+[lobcore](https://github.com/charlieyanhx/lobcore) — bounded-array limit order book in Rust with a
+reference-book differential test, ITCH 5.0 replay and PyO3 bindings.
 
 ## References
 
